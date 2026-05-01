@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Distributed Training Optimization · 分散式訓練優化架構</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Highlight.js -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+
+<!-- Mermaid -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+
+<style>
+:root {
+  --bg: #0b0f17;
+  --bg-elev: #111826;
+  --bg-soft: #161f30;
+  --border: #1f2a3d;
+  --text: #e6edf7;
+  --text-soft: #9aa7bd;
+  --text-mute: #6b7993;
+  --accent: #7ab7ff;
+  --accent-2: #b18bff;
+  --success: #65d6a4;
+  --warn: #ffc46b;
+  --danger: #ff7a8a;
+  --code-bg: #0d1320;
+  --shadow: 0 10px 40px rgba(0,0,0,.35);
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+  background: radial-gradient(1200px 800px at 80% -10%, #1a2542 0%, transparent 60%),
+              radial-gradient(900px 600px at -10% 30%, #1a1a3d 0%, transparent 55%),
+              var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 48px;
+}
+
+@media (max-width: 960px) {
+  .container { grid-template-columns: 1fr; gap: 0; }
+  .toc { display: none; }
+}
+
+/* ============ Hero ============ */
+.hero {
+  text-align: center;
+  padding: 80px 24px 40px;
+  position: relative;
+}
+.hero .badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  background: var(--bg-elev);
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: clamp(32px, 5vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0 0 16px;
+  background: linear-gradient(135deg, #fff 0%, #7ab7ff 50%, #b18bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero .subtitle {
+  font-size: 18px;
+  color: var(--text-soft);
+  max-width: 720px;
+  margin: 0 auto;
+}
+.hero .meta {
+  margin-top: 28px;
+  color: var(--text-mute);
+  font-size: 13px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.hero .meta span::before { content: "·"; margin-right: 16px; color: var(--text-mute); }
+.hero .meta span:first-child::before { content: ""; margin-right: 0; }
+
+/* ============ TOC sidebar ============ */
+.toc {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 16px 0;
+  font-size: 13px;
+}
+.toc h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-mute);
+  margin: 0 0 12px;
+}
+.toc a {
+  display: block;
+  padding: 6px 12px;
+  border-left: 2px solid transparent;
+  color: var(--text-soft);
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.toc a:hover, .toc a.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: rgba(122, 183, 255, 0.05);
+}
+.toc a.sub {
+  padding-left: 24px;
+  font-size: 12px;
+  color: var(--text-mute);
+}
+
+/* ============ Article ============ */
+article { padding: 24px 0 120px; max-width: 820px; }
+
+article h2 {
+  font-size: 30px;
+  font-weight: 700;
+  margin: 64px 0 16px;
+  letter-spacing: -0.01em;
+  color: #fff;
+  scroll-margin-top: 24px;
+  position: relative;
+}
+article h2 .num {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+  margin-right: 12px;
+  font-weight: 600;
+  font-size: 22px;
+}
+
+article h3 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 40px 0 12px;
+  color: #fff;
+  scroll-margin-top: 24px;
+}
+
+article h4 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 28px 0 8px;
+  color: var(--accent);
+}
+
+article p { color: var(--text); margin: 0 0 14px; }
+article a { color: var(--accent); }
+
+article ul, article ol { padding-left: 24px; margin: 0 0 16px; }
+article li { margin: 4px 0; }
+
+/* ============ Callouts ============ */
+.callout {
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 20px 0;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.callout.info    { border-left: 3px solid var(--accent); }
+.callout.success { border-left: 3px solid var(--success); }
+.callout.warn    { border-left: 3px solid var(--warn); }
+.callout.danger  { border-left: 3px solid var(--danger); }
+.callout .title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.callout.info    .title { color: var(--accent); }
+.callout.success .title { color: var(--success); }
+.callout.warn    .title { color: var(--warn); }
+.callout.danger  .title { color: var(--danger); }
+.callout p:last-child { margin-bottom: 0; }
+
+/* ============ Key insight (北極星 highlight) ============ */
+.north-star {
+  background: linear-gradient(135deg, rgba(122,183,255,0.12), rgba(177,139,255,0.12));
+  border: 1px solid rgba(122,183,255,0.3);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin: 24px 0;
+  text-align: center;
+  position: relative;
+}
+.north-star::before {
+  content: "★";
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg);
+  padding: 0 12px;
+  color: var(--warn);
+  font-size: 20px;
+}
+.north-star .label {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin-bottom: 8px;
+}
+.north-star .text {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* ============ Pre / Code ============ */
+pre {
+  background: var(--code-bg) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px !important;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+code {
+  font-family: 'JetBrains Mono', monospace;
+}
+:not(pre) > code {
+  background: var(--bg-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.88em;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+/* ============ ASCII box ============ */
+.ascii-box {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text-soft);
+  margin: 16px 0;
+}
+
+/* ============ Tables ============ */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin: 20px 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-elev);
+  font-size: 14px;
+}
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  background: var(--bg-soft);
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(122, 183, 255, 0.04); }
+td .pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pill.green { background: rgba(101,214,164,0.15); color: var(--success); }
+.pill.blue  { background: rgba(122,183,255,0.15); color: var(--accent); }
+.pill.purp  { background: rgba(177,139,255,0.15); color: var(--accent-2); }
+.pill.warn  { background: rgba(255,196,107,0.15); color: var(--warn); }
+.pill.red   { background: rgba(255,122,138,0.15); color: var(--danger); }
+
+/* ============ Tabs ============ */
+.tabs {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elev);
+  margin: 20px 0;
+}
+.tab-headers {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+.tab-headers button {
+  flex: 1;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab-headers button:hover { color: var(--text); }
+.tab-headers button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(122,183,255,0.06);
+}
+.tab-content { padding: 20px; display: none; }
+.tab-content.active { display: block; }
+.tab-content h4 { margin-top: 0; }
+
+/* ============ Mermaid container ============ */
+.mermaid-wrap {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin: 20px 0;
+  overflow-x: auto;
+}
+.mermaid {
+  display: flex;
+  justify-content: center;
+}
+
+/* ============ Step cards (5-step design) ============ */
+.step-grid {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+}
+.step-card {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  align-items: start;
+  transition: all 0.2s;
+}
+.step-card:hover {
+  border-color: rgba(122,183,255,0.4);
+  transform: translateY(-1px);
+}
+.step-card .step-num {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(122,183,255,0.2), rgba(177,139,255,0.2));
+  border: 1px solid rgba(122,183,255,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--accent);
+}
+.step-card h4 { margin: 0 0 6px; color: #fff; font-size: 16px; }
+.step-card .goal { font-size: 13px; color: var(--text-mute); margin-top: 8px; }
+
+/* ============ 3 resource cards ============ */
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 20px 0;
+}
+@media (max-width: 700px) { .resource-grid { grid-template-columns: 1fr; } }
+.resource-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.resource-card .icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+.resource-card.mem    .icon { background: rgba(101,214,164,0.15); color: var(--success); }
+.resource-card.comm   .icon { background: rgba(122,183,255,0.15); color: var(--accent); }
+.resource-card.compute .icon { background: rgba(177,139,255,0.15); color: var(--accent-2); }
+.resource-card h4 { margin: 0 0 6px; font-size: 15px; color: #fff; }
+.resource-card p  { margin: 0; font-size: 13px; color: var(--text-soft); }
+
+/* ============ Decision tree (interactive) ============ */
+.decision-tree {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin: 20px 0;
+}
+.dt-node {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 8px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dt-node:hover { border-color: var(--accent); }
+.dt-node .q { font-weight: 600; color: #fff; }
+.dt-node .a {
+  display: none;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  color: var(--text-soft);
+  font-size: 14px;
+}
+.dt-node.open .a { display: block; }
+.dt-node.open { border-color: var(--accent); }
+.dt-node .toggle { float: right; color: var(--text-mute); transition: transform 0.2s; }
+.dt-node.open .toggle { transform: rotate(180deg); }
+
+/* ============ TL;DR ============ */
+.tldr {
+  background: linear-gradient(135deg, rgba(101,214,164,0.10), rgba(122,183,255,0.10));
+  border: 1px solid rgba(101,214,164,0.3);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  margin: 32px 0;
+}
+.tldr h3 { margin-top: 0; color: var(--success); }
+
+/* ============ Footer ============ */
+footer {
+  text-align: center;
+  padding: 60px 20px 40px;
+  border-top: 1px solid var(--border);
+  margin-top: 60px;
+  color: var(--text-mute);
+  font-size: 13px;
+}
+
+/* ============ Util ============ */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 48px 0;
+}
+.center { text-align: center; }
+.muted { color: var(--text-mute); }
+.kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <span class="badge">Distributed Systems · Deep Learning</span>
+  <h1>分散式訓練優化架構<br/><span style="font-size:0.55em; font-weight:600; opacity:0.85;">A Systematic Framework for Efficient Large-Scale Training</span></h1>
+  <p class="subtitle">
+    從「會用技術」升級到「會設計系統」 —— 一套可落地的方法論，涵蓋 <b>Memory</b>、<b>Communication</b>、<b>Compute</b> 三大資源視角，
+    幫你在面試與實戰中都能說清楚「為什麼這麼做」。
+  </p>
+  <div class="meta">
+    <span>2026 · April</span>
+    <span>~12 min read</span>
+    <span>Level: Intermediate → Advanced</span>
+  </div>
+</section>
+
+<div class="container">
+  <!-- ============ TOC ============ -->
+  <nav class="toc">
+    <h4>Contents</h4>
+    <a href="#sec-1">1. 北極星目標</a>
+    <a href="#sec-2">2. 三大資源視角</a>
+    <a href="#sec-3">3. 設計流程（5 Steps）</a>
+    <a href="#sec-3-1" class="sub">3.1 Memory</a>
+    <a href="#sec-3-2" class="sub">3.2 Communication</a>
+    <a href="#sec-3-3" class="sub">3.3 Overlap</a>
+    <a href="#sec-3-4" class="sub">3.4 Compute</a>
+    <a href="#sec-comm">3+. Comm 深入展開</a>
+    <a href="#sec-4">4. Decision Flow</a>
+    <a href="#sec-5">5. 組合模板 A/B/C</a>
+    <a href="#sec-6">6. 關鍵參數調優</a>
+    <a href="#sec-7">7. 統一抽象</a>
+    <a href="#sec-tldr">TL;DR</a>
+  </nav>
+
+  <!-- ============ ARTICLE ============ -->
+  <article>
+
+    <p class="muted">
+      你會發現，多數人講分散式訓練，講的都是「技術點」：DDP、FSDP、ZeRO、Mixed Precision、Gradient Checkpoint…
+      但工程師真正缺的是 <b>架構思維</b>：何時用什麼？怎麼組合？瓶頸在哪？這篇就是回答這些問題。
+    </p>
+
+    <div class="north-star">
+      <div class="label">The Core Idea</div>
+      <div class="text">優化的核心是：<u>先找到瓶頸，再用對應手段解決，而不是盲目疊加技術</u>。</div>
+    </div>
+
+    <!-- ============ SECTION 1 ============ -->
+    <h2 id="sec-1"><span class="num">01</span>北極星目標</h2>
+    <p>所有設計決策的起點，是先把目標說清楚。在分散式訓練裡，北極星目標只有兩個：</p>
+    <div class="callout info">
+      <div class="title">🎯 Two Goals</div>
+      <ul>
+        <li><b>最大化吞吐</b>（throughput）：<code>samples/sec</code> 或 <code>tokens/sec</code></li>
+        <li><b>顯存約束內訓練穩定收斂</b>：放得下、跑得穩、不 OOM、不 NaN</li>
+      </ul>
+    </div>
+    <p>所有後面的優化手段，都是這兩個目標下的權衡（trade-off），沒有銀彈。</p>
+
+    <!-- ============ SECTION 2 ============ -->
+    <h2 id="sec-2"><span class="num">02</span>三大資源視角</h2>
+    <p>我喜歡把所有優化都映射到三個資源軸上 —— 這是面試裡最容易拿分的「結構化思維」：</p>
+
+    <div class="resource-grid">
+      <div class="resource-card mem">
+        <div class="icon">💾</div>
+        <h4>Memory（顯存）</h4>
+        <p>放得下嗎？模型權重 + 梯度 + 優化器狀態 + activation。</p>
+      </div>
+      <div class="resource-card comm">
+        <div class="icon">🔗</div>
+        <h4>Communication（通訊）</h4>
+        <p>傳得快嗎？AllReduce / AllGather / ReduceScatter。</p>
+      </div>
+      <div class="resource-card compute">
+        <div class="icon">⚡</div>
+        <h4>Compute（算力）</h4>
+        <p>算得滿嗎？GPU 利用率、kernel 效率、算術強度。</p>
+      </div>
+    </div>
+
+    <div class="callout success">
+      <div class="title">💡 統一原則</div>
+      <p>每一個優化手段都在「動」這三個資源中的至少一個。當你看到一個新技術，先問：它降的是哪個？換的是哪個？</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>資源軸</th><th>常見瓶頸訊號</th><th>對應優化方向</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill green">Memory</span></td><td>OOM、batch 上不去</td><td>Mixed Precision、Activation Checkpoint、ZeRO/FSDP</td></tr>
+          <tr><td><span class="pill blue">Comm</span></td><td>NCCL 時間佔比 &gt; 30%</td><td>Bucket Fusion、Overlap、Compression</td></tr>
+          <tr><td><span class="pill purp">Compute</span></td><td>GPU 利用率高但慢</td><td>Fused Kernel、bf16、增大 batch</td></tr>
+          <tr><td><span class="pill warn">I/O</span></td><td>GPU util &lt; 70%、波動大</td><td>DataLoader workers、prefetch</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============ SECTION 3 ============ -->
+    <h2 id="sec-3"><span class="num">03</span>設計流程（5 Steps）</h2>
+    <p>有了三大資源視角後，實際設計時遵循這 5 步，幾乎可以涵蓋所有場景：</p>
+
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart LR
+    S1[Step 1<br/>選並行策略] --> S2[Step 2<br/>放得下<br/>Memory]
+    S2 --> S3[Step 3<br/>傳得快<br/>Communication]
+    S3 --> S4[Step 4<br/>傳不被看到<br/>Overlap]
+    S4 --> S5[Step 5<br/>算得快<br/>Compute]
+    S5 --> P[Profile &amp; Iterate]
+    P -.->|新瓶頸| S2
+
+    classDef step fill:#161f30,stroke:#7ab7ff,color:#e6edf7,stroke-width:1px
+    classDef profile fill:#1a2542,stroke:#b18bff,color:#e6edf7,stroke-width:1px
+    class S1,S2,S3,S4,S5 step
+    class P profile
+      </div>
+    </div>
+
+    <div class="step-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div>
+          <h4>選並行策略（結構層）</h4>
+          <p>小模型 → DDP（簡單快）；中模型 → FSDP（分片）；超大模型 → DP + TP + PP 組合（3D Parallelism）。</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div>
+          <h4 id="sec-3-1">放得下（Memory 設計）</h4>
+          <p>優先級：① Mixed Precision (bf16) → ② Activation Checkpoint → ③ CPU/NVMe Offload。</p>
+          <p class="goal">🎯 Goal：<code>batch + model</code> 能穩定放進 GPU，且 OOM margin 留 &gt; 10%。</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div>
+          <h4 id="sec-3-2">傳得快（Communication 設計）</h4>
+          <p>① Bucket Fusion（合併小 tensor）② 合理 bucket size（10–50MB）③ Topology-aware（NCCL 自動處理）。</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div>
+          <h4 id="sec-3-3">傳不被看到（Overlap 設計）</h4>
+          <p>讓通訊隱藏在計算裡：async NCCL、backward overlap、prefetch all-gather、pipeline overlap (L / L-1 / L+1)。</p>
+          <p class="goal">🎯 Goal：通訊時間在 timeline 上「消失」（被 compute kernel 蓋住）。</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">5</div>
+        <div>
+          <h4 id="sec-3-4">算得快（Compute 設計）</h4>
+          <p>Fused kernel、Fused optimizer、合理 batch（提高算術強度 arithmetic intensity）、CUDA Graphs（減少 launch overhead）。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SECTION 3+ Communication Deep Dive ============ -->
+    <h2 id="sec-comm"><span class="num">03+</span>Communication 優化深入展開</h2>
+    <p>因為通訊往往是大模型的第一瓶頸，我把它單獨拆出來講。Communication 優化可以拆成 <b>四個方向</b>：</p>
+
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart TB
+    C[Communication 優化] --> A1[3.1 減少數據量<br/>Compression]
+    C --> A2[3.2 減少次數<br/>Frequency / Fusion]
+    C --> A3[3.3 提高頻寬利用<br/>Bandwidth]
+    C --> A4[3.4 隱藏時間<br/>Overlap]
+
+    A1 --> A1a[Quantization<br/>FP32→bf16/int8/int4]
+    A1 --> A1b[Sparsification<br/>Top-K]
+    A1 --> A1c[Sign-based<br/>SignSGD]
+    A1 --> A1d[Error Feedback<br/>必須有！]
+
+    A2 --> A2a[Bucket Fusion]
+    A2 --> A2b[Gradient Accumulation]
+
+    A3 --> A3a[Bucket size 10-50MB]
+    A3 --> A3b[Topology-aware NCCL]
+
+    A4 --> A4a[Async NCCL]
+    A4 --> A4b[Backward overlap]
+    A4 --> A4c[Pipeline overlap]
+
+    classDef root fill:#1a2542,stroke:#b18bff,color:#e6edf7
+    classDef cat  fill:#161f30,stroke:#7ab7ff,color:#e6edf7
+    classDef leaf fill:#0d1320,stroke:#1f2a3d,color:#9aa7bd
+    class C root
+    class A1,A2,A3,A4 cat
+    class A1a,A1b,A1c,A1d,A2a,A2b,A3a,A3b,A4a,A4b,A4c leaf
+      </div>
+    </div>
+
+    <h3>3.1 減少通訊量（Compression）🔥</h3>
+
+    <h4>(1) Quantization 量化</h4>
+    <p><code>FP32 → FP16 / 8-bit / 4-bit / 1-bit</code>。最常見、最容易拿到收益的手段，bf16 幾乎是現代 LLM 訓練的標配。</p>
+
+    <h4>(2) Sparsification 稀疏化</h4>
+    <p>只傳 top-K 梯度（例如前 1%），其餘清零。在頻寬極差的環境（跨機房）有效。</p>
+
+    <h4>(3) Threshold-based</h4>
+    <p>只傳超過某個閾值的梯度，動態調整稀疏率。</p>
+
+    <h4>(4) Sign-based（極端壓縮）</h4>
+    <p>只傳梯度符號（+/-）。代表方法：<b>SignSGD</b>。32× 壓縮率，但需要精心設計才能收斂。</p>
+
+    <h4>(5) Error Feedback（一定要寫！）</h4>
+    <div class="callout warn">
+      <div class="title">⚠️ 為什麼是必選</div>
+      <p>壓縮會丟資訊。如果不補回來 → 訓練會發散（diverge）。Error Feedback 把這次「壓縮損失的部分」存起來，下次補回去。</p>
+    </div>
+<pre><code class="language-python"># Pseudocode: Top-K with Error Feedback
+error = 0
+for step in training:
+    g = compute_gradient()
+    g_corrected = g + error            # 補上次的殘差
+    g_compressed = top_k(g_corrected)  # 壓縮
+    error = g_corrected - g_compressed # 記錄這次的殘差
+    all_reduce(g_compressed)
+    update(g_compressed)
+</code></pre>
+
+    <h4>(6) Low-rank Compression（進階）</h4>
+    <p>把梯度矩陣做低秩分解 <code>G ≈ U·Vᵀ</code>，只傳 <code>U, V</code>。<b>PowerSGD</b> 是經典代表。</p>
+
+    <h3>3.2 減少通訊次數（Frequency）</h3>
+    <ul>
+      <li><b>Bucket Fusion</b>：把多個小 tensor 合併成一個 bucket 再 AllReduce，減少啟動成本（latency）。</li>
+      <li><b>Gradient Accumulation</b>：累積 N 個 micro-batch 的梯度後才同步一次，等效擴大 batch。</li>
+    </ul>
+
+    <h3>3.3 提高頻寬利用（Bandwidth）</h3>
+    <ul>
+      <li>Bucket size：太小 → latency dominated；太大 → overlap 不到。<b>10–50MB</b> 是常見起點。</li>
+      <li>Topology-aware：NCCL 自動偵測 NVLink / PCIe / IB，挑最佳 ring/tree 拓撲。</li>
+    </ul>
+
+    <h3>3.4 隱藏通訊時間（Overlap）</h3>
+    <p>這是最重要的一節。看一張 timeline：</p>
+
+    <div class="ascii-box">┌── Layer L ──────────────────────────────────┐
+│  Forward  ▓▓▓▓                              │
+│  Backward      ▓▓▓▓▓▓                       │
+│  AllReduce          ░░░░░░░░  ← 串行：浪費！ │
+└──────────────────────────────────────────────┘
+
+vs.  ✅ Overlap
+
+┌── Layer L ──────────────────────────────────┐
+│  Backward L   ▓▓▓▓▓▓                        │
+│  AllReduce L     ░░░░░░░░ ← 同時進行         │
+│  Backward L-1     ▓▓▓▓▓▓                    │
+│  AllReduce L-1       ░░░░░░░░               │
+└──────────────────────────────────────────────┘</div>
+
+    <p>三個重要 overlap 技術：</p>
+    <ol>
+      <li><b>Backward overlap</b>：當前 layer 算 backward 時，上一個 layer 的 gradient 已經在 reduce-scatter。</li>
+      <li><b>Prefetch</b>：FSDP 在算 layer L 時，提前 all-gather layer L+1 的權重。</li>
+      <li><b>Pipeline overlap</b>：1F1B / interleaved schedule，讓不同 micro-batch 的 forward / backward / comm 並行。</li>
+    </ol>
+
+    <!-- ============ SECTION 4: Decision Tree ============ -->
+    <h2 id="sec-4"><span class="num">04</span>決策流程圖（Decision Flow）</h2>
+    <p>實戰中，看到問題 → 對症下藥。把上面所有東西濃縮成一張決策樹：</p>
+
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart TD
+    Start([Profile training step]) --> Q1{GPU util?}
+    Q1 -->|&lt; 70%| InputBound[Input-bound<br/>→ DataLoader workers↑<br/>→ prefetch / pin_memory]
+    Q1 -->|&gt; 70%| Q2{NCCL time ratio?}
+    Q2 -->|&gt; 30%| CommBound[Communication-bound]
+    Q2 -->|&lt; 30%| ComputeBound[Compute-bound]
+
+    CommBound --> CB1[Bucket fusion]
+    CommBound --> CB2[Backward overlap]
+    CommBound --> CB3[Compression bf16/int8]
+    CommBound --> CB4[Network: NVLink/IB]
+
+    ComputeBound --> CP1[Mixed Precision bf16]
+    ComputeBound --> CP2[Fused kernels<br/>FlashAttention]
+    ComputeBound --> CP3[Increase batch size]
+    ComputeBound --> CP4[CUDA Graphs]
+
+    Start --> Q3{OOM?}
+    Q3 -->|Yes| Mem[Memory-bound]
+    Mem --> M1[bf16]
+    Mem --> M2[Activation checkpoint]
+    Mem --> M3[FSDP / ZeRO-3]
+    Mem --> M4[CPU/NVMe offload]
+
+    classDef bound fill:#1a2542,stroke:#ff7a8a,color:#fff
+    classDef solution fill:#161f30,stroke:#65d6a4,color:#e6edf7
+    class InputBound,CommBound,ComputeBound,Mem bound
+    class CB1,CB2,CB3,CB4,CP1,CP2,CP3,CP4,M1,M2,M3,M4 solution
+      </div>
+    </div>
+
+    <h3>互動式決策樹（點擊展開）</h3>
+    <div class="decision-tree">
+      <div class="dt-node">
+        <span class="q">🟢 GPU 利用率 &gt; 90%、NCCL 佔比低 → 我是哪一類？</span>
+        <span class="toggle">▼</span>
+        <div class="a">
+          你是 <b>Compute-bound</b>。優化方向：fused kernels（FlashAttention、Apex fused optimizer）、bf16、提高 batch size 增加算術強度、CUDA Graphs。
+        </div>
+      </div>
+      <div class="dt-node">
+        <span class="q">🟡 NCCL 時間長、GPU 經常等通訊 → 我是哪一類？</span>
+        <span class="toggle">▼</span>
+        <div class="a">
+          你是 <b>Communication-bound</b>。優化方向：bucket fusion、backward / prefetch overlap、compression（量化或 top-K）、檢查網路拓撲（NVLink / IB）。
+        </div>
+      </div>
+      <div class="dt-node">
+        <span class="q">🔴 GPU 利用率低（&lt; 70%）、波動大 → 我是哪一類？</span>
+        <span class="toggle">▼</span>
+        <div class="a">
+          你是 <b>Input-bound</b>（DataLoader 餵不上）。優化方向：增加 num_workers、pin_memory、prefetch_factor、用更快的格式（webdataset / arrow）、考慮 GPU 解碼。
+        </div>
+      </div>
+      <div class="dt-node">
+        <span class="q">💥 OOM、batch 上不去 → 我是哪一類？</span>
+        <span class="toggle">▼</span>
+        <div class="a">
+          你是 <b>Memory-bound</b>。優化順序：bf16 → activation checkpoint → FSDP/ZeRO-3 → CPU/NVMe offload。盡量先用前面便宜的手段。
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SECTION 5: Templates ============ -->
+    <h2 id="sec-5"><span class="num">05</span>關鍵組件如何組合（實戰模板）</h2>
+    <p>三套模板 cover 95% 場景。先選符合你規模的模板，再按決策樹微調：</p>
+
+    <div class="tabs">
+      <div class="tab-headers">
+        <button class="active" data-tab="ta">A · 單機多卡</button>
+        <button data-tab="tb">B · 中大模型</button>
+        <button data-tab="tc">C · 超大模型 (LLM)</button>
+      </div>
+
+      <div class="tab-content active" id="ta">
+        <h4>適用場景</h4>
+        <p>單機 8×A100 / H100，模型 &lt; 7B 參數，研究實驗、微調、原型開發。</p>
+        <h4>組合</h4>
+        <ul>
+          <li>並行：<span class="pill blue">DDP</span></li>
+          <li>精度：<span class="pill green">bf16 Mixed Precision</span></li>
+          <li>通訊：<span class="pill purp">Default Gradient Bucket（25MB）</span></li>
+        </ul>
+<pre><code class="language-python">import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.cuda.amp import autocast, GradScaler
+
+model = MyModel().cuda()
+model = DDP(model, bucket_cap_mb=25, gradient_as_bucket_view=True)
+
+scaler = GradScaler()
+for batch in loader:
+    optimizer.zero_grad(set_to_none=True)
+    with autocast(dtype=torch.bfloat16):
+        loss = model(batch)
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+</code></pre>
+      </div>
+
+      <div class="tab-content" id="tb">
+        <h4>適用場景</h4>
+        <p>單機顯存放不下 + 多機 (2~8 nodes)，模型 7B–70B，常見的 LLM finetune / 預訓練中等規模。</p>
+        <h4>組合</h4>
+        <ul>
+          <li>並行：<span class="pill blue">FSDP（FULL_SHARD）</span></li>
+          <li>精度：<span class="pill green">bf16 + reduce-scatter in bf16</span></li>
+          <li>顯存：<span class="pill warn">Activation Checkpoint</span></li>
+          <li>通訊：<span class="pill purp">Bucket + Prefetch + Backward Overlap</span></li>
+        </ul>
+<pre><code class="language-python">from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+    ShardingStrategy, MixedPrecision, BackwardPrefetch,
+)
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    checkpoint_wrapper, CheckpointImpl,
+)
+
+mp_policy = MixedPrecision(
+    param_dtype=torch.bfloat16,
+    reduce_dtype=torch.bfloat16,
+    buffer_dtype=torch.bfloat16,
+)
+
+model = FSDP(
+    model,
+    sharding_strategy=ShardingStrategy.FULL_SHARD,
+    mixed_precision=mp_policy,
+    backward_prefetch=BackwardPrefetch.BACKWARD_PRE,  # 關鍵：overlap
+    auto_wrap_policy=transformer_auto_wrap_policy,
+    forward_prefetch=True,
+    limit_all_gathers=True,
+)
+
+# 對 transformer block 加 activation checkpoint
+apply_activation_checkpointing(
+    model,
+    checkpoint_wrapper_fn=lambda m: checkpoint_wrapper(m, checkpoint_impl=CheckpointImpl.NO_REENTRANT),
+    check_fn=lambda m: isinstance(m, TransformerBlock),
+)
+</code></pre>
+      </div>
+
+      <div class="tab-content" id="tc">
+        <h4>適用場景</h4>
+        <p>數百張卡 / 多機房，模型 &gt; 100B，預訓練大型 LLM。</p>
+        <h4>組合（3D Parallelism）</h4>
+        <ul>
+          <li>並行：<span class="pill blue">FSDP / DP × TP × PP</span></li>
+          <li>精度：<span class="pill green">bf16</span>（避免 fp16 溢出）</li>
+          <li>顯存：<span class="pill warn">Selective Activation Checkpoint</span></li>
+          <li>通訊：<span class="pill purp">Aggressive overlap (1F1B / interleaved)</span></li>
+          <li>算子：<span class="pill red">FlashAttention-2 / Fused RMSNorm / Fused SwiGLU</span></li>
+        </ul>
+<pre><code class="language-python"># 概念示意（實際多用 Megatron-LM / DeepSpeed / TorchTitan）
+parallel_config = {
+    "data_parallel":    8,    # DP
+    "tensor_parallel":  8,    # TP, 通常 = NVLink 域大小
+    "pipeline_parallel": 4,   # PP, 跨機房
+    "schedule": "1F1B-interleaved",
+}
+# 訣竅：TP 放在機內（NVLink），DP/PP 放在機間（IB）
+# 因為 TP 通訊量最大（每層都要 AllReduce activation）
+</code></pre>
+        <div class="callout info">
+          <div class="title">💡 拓撲匹配原則</div>
+          <p>把通訊量最大的並行軸放在頻寬最高的網路上：<b>TP → NVLink &gt; DP → IB &gt; PP → 跨機房</b>。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SECTION 6: Tuning ============ -->
+    <h2 id="sec-6"><span class="num">06</span>關鍵參數調優</h2>
+    <p>真正讓 training 快起來的，往往不是換技術，而是這幾個 knob 調對了：</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>參數</th><th>取值範圍</th><th>影響</th><th>怎麼調</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>bucket_size_mb</code></td>
+            <td>10 – 50 MB</td>
+            <td>overlap 粒度 vs 通訊效率</td>
+            <td>NCCL 時間長 → 調大；overlap 沒蓋住 → 調小</td>
+          </tr>
+          <tr>
+            <td><code>activation_checkpoint</code></td>
+            <td>Per-layer / Selective</td>
+            <td>顯存↓ vs 計算 +30%</td>
+            <td>OOM 才開；只 checkpoint attention/MLP</td>
+          </tr>
+          <tr>
+            <td><code>micro_batch_size</code></td>
+            <td>1 – 8</td>
+            <td>算術強度 / pipeline bubble</td>
+            <td>大模型先小再增；觀察 GPU util</td>
+          </tr>
+          <tr>
+            <td><code>gradient_accumulation</code></td>
+            <td>1 – 64</td>
+            <td>等效 batch / 通訊頻率</td>
+            <td>頻寬差 → 調大；要 throughput → 平衡</td>
+          </tr>
+          <tr>
+            <td><code>forward_prefetch</code></td>
+            <td>True / False</td>
+            <td>顯存↑ vs overlap↑</td>
+            <td>顯存有空間 → 開</td>
+          </tr>
+          <tr>
+            <td><code>num_workers</code> (DataLoader)</td>
+            <td>4 – 16</td>
+            <td>I/O bottleneck</td>
+            <td>GPU util &lt; 70% → 調大</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout danger">
+      <div class="title">⚠️ 調參要點</div>
+      <p>每次只調一個 knob、用 profiler（torch.profiler / Nsight）看 timeline、保留 baseline 對比。<b>絕對不要</b>同時改三個東西然後猜哪個有效。</p>
+    </div>
+
+    <!-- ============ SECTION 7: Unified Abstraction ============ -->
+    <h2 id="sec-7"><span class="num">07</span>一個統一抽象（很加分）</h2>
+    <p>如果讓我用一句話總結所有優化技術 —— 它們其實只在做三件事：</p>
+
+    <div class="resource-grid">
+      <div class="resource-card mem">
+        <div class="icon">📦</div>
+        <h4>① 減少數據量</h4>
+        <p>compression / lower precision / sparsification</p>
+      </div>
+      <div class="resource-card comm">
+        <div class="icon">🔁</div>
+        <h4>② 減少次數</h4>
+        <p>bucket fusion / gradient accumulation</p>
+      </div>
+      <div class="resource-card compute">
+        <div class="icon">👁️</div>
+        <h4>③ 隱藏時間</h4>
+        <p>overlap / pipeline / prefetch</p>
+      </div>
+    </div>
+
+    <div class="north-star">
+      <div class="label">Interview-Ready One-Liner</div>
+      <div class="text">
+        Efficient distributed training is achieved by systematically optimizing<br/>
+        <b>memory usage</b>, <b>communication overhead</b>, and <b>compute utilization</b><br/>
+        based on the observed bottleneck.
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ============ TL;DR ============ -->
+    <div class="tldr" id="sec-tldr">
+      <h3>TL;DR</h3>
+      <ol>
+        <li><b>北極星</b>：throughput + 穩定收斂。</li>
+        <li><b>三大資源</b>：Memory / Communication / Compute —— 所有技術都在動這三個軸。</li>
+        <li><b>5 步流程</b>：選並行 → 放得下 → 傳得快 → 傳不被看到 → 算得快。</li>
+        <li><b>決策樹</b>：先 profile，找到瓶頸（OOM / Comm / Compute / I/O），再對症下藥。</li>
+        <li><b>三套模板</b>：DDP（小）→ FSDP+AC（中）→ 3D Parallelism + Fused kernel（超大）。</li>
+        <li><b>核心心法</b>：<u>先找瓶頸，再用對應手段，不要盲目疊加技術。</u></li>
+      </ol>
+    </div>
+
+    <p class="muted center" style="margin-top:40px;">
+      下一篇預計寫：<b>FSDP 的 reduce-scatter / all-gather 實作細節</b>，以及 <b>1F1B Pipeline 排程的 timeline 推導</b>。
+    </p>
+
+  </article>
+</div>
+
+<footer>
+  <p>Distributed Training Optimization · Written for systems-thinking engineers · 2026</p>
+</footer>
+
+<script>
+// ============ Mermaid init ============
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    background: '#111826',
+    primaryColor: '#161f30',
+    primaryTextColor: '#e6edf7',
+    primaryBorderColor: '#7ab7ff',
+    lineColor: '#7ab7ff',
+    secondaryColor: '#1a2542',
+    tertiaryColor: '#0d1320',
+    fontFamily: 'Inter, sans-serif',
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 16,
+  },
+});
+
+// ============ Highlight.js ============
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.hljs) {
+    document.querySelectorAll('pre code').forEach((el) => hljs.highlightElement(el));
+  }
+
+  // ============ Tabs ============
+  document.querySelectorAll('.tab-headers button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tabs = btn.closest('.tabs');
+      tabs.querySelectorAll('.tab-headers button').forEach((b) => b.classList.remove('active'));
+      tabs.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+      btn.classList.add('active');
+      tabs.querySelector('#' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ============ Decision tree toggle ============
+  document.querySelectorAll('.dt-node').forEach((node) => {
+    node.addEventListener('click', () => node.classList.toggle('open'));
+  });
+
+  // ============ TOC active state ============
+  const tocLinks = document.querySelectorAll('.toc a');
+  const sections = Array.from(tocLinks).map((a) => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        tocLinks.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach((s) => observer.observe(s));
+});
+</script>
+</body>
+</html>
