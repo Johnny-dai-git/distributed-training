@@ -1,13 +1,187 @@
-<hr>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why Your 7B Model Won't Fit on 8 GPUs — And How ZeRO Fixes It</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Georgia', serif;
+      font-size: 20px;
+      line-height: 1.85;
+      color: #1a1a1a;
+      background: #fff;
+      max-width: 740px;
+      margin: 0 auto;
+      padding: 60px 24px 100px;
+    }
+    h1 {
+      font-size: 42px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 28px;
+      letter-spacing: -0.8px;
+    }
+    h2 {
+      font-size: 27px;
+      font-weight: 700;
+      margin: 56px 0 16px;
+      letter-spacing: -0.3px;
+    }
+    p { margin-bottom: 22px; }
+    hr {
+      border: none;
+      border-top: 1px solid #e8e8e8;
+      margin: 48px 0;
+    }
+    ul { margin: 0 0 22px 28px; }
+    li { margin-bottom: 10px; }
+    strong { font-weight: 700; }
+    em { font-style: italic; }
+    figure {
+      margin: 36px -8px;
+      background: #f9f9f9;
+      border-radius: 10px;
+      padding: 24px;
+      border: 1px solid #ebebeb;
+    }
+    figcaption {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 13px;
+      color: #999;
+      text-align: center;
+      margin-top: 12px;
+      font-style: italic;
+    }
+    svg { display: block; width: 100%; height: auto; }
+    .cta {
+      display: block;
+      background: #1a1a1a;
+      color: #fff;
+      text-align: center;
+      padding: 20px 24px;
+      border-radius: 8px;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      text-decoration: none;
+      margin: 36px 0;
+      letter-spacing: 0.2px;
+    }
+    .cta:hover { background: #333; }
+    .ref {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 13.5px;
+      color: #999;
+      border-top: 1px solid #e8e8e8;
+      padding-top: 24px;
+      margin-top: 48px;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
 
-<h2>Want the full optimization framework?</h2>
-<p>The piece above focuses on the FSDP / ZeRO memory story. If you want
-the bigger picture — single-GPU optimizations, ring AllReduce internals,
-Tensor and Pipeline parallelism, the col → row sandwich, network topology
-rules, and a roofline-driven decision tree — read the deep-dive companion:</p>
+<h1>Why Your 7B Model Won't Fit on 8 GPUs — And How ZeRO Fixes It</h1>
 
-<a class="cta" href="https://johnny-dai-git.github.io/distributed-training/distributed-training-optimization-en.html" target="_blank">
-  → Optimizing Distributed Machine Learning · From 1 GPU to 1000
+<a class="cta" href="https://johnny-dai-git.github.io/distributed-training/" target="_blank">
+  → Read the full interactive version with animated diagrams
 </a>
 
-<p style="color:#888;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;">~30 min read · animated diagrams · DDP → FSDP → TP → PP → 3D parallelism · plus references.</p>
+<a class="cta" href="https://johnny-dai-git.github.io/distributed-training/distributed-training-optimization-en.html" target="_blank">
+  → Read the deep-dive: Optimizing Distributed Machine Learning · From 1 GPU to 1000
+</a>
+
+<p>You have 8 × A100s (80 GB each). That's 640 GB of GPU memory. Your 7B model needs 98 GB. Simple math says it should fit six times over.</p>
+<p>So why does training crash with an OOM error?</p>
+<p>Because 98 GB is just the <em>parameters</em>. By the time you add gradients and Adam optimizer states, every GPU needs <strong>98 GB per replica</strong> — and DDP puts a full replica on every single GPU. Your 640 GB cluster holds exactly one copy of the model, with nothing left for activations or batch data.</p>
+
+<!-- Graphic 1: DDP replication problem -->
+<figure>
+  <img src="https://johnny-dai-git.github.io/distributed-training/imgs/fig1.png" style="width:100%;border-radius:8px;" alt="Figure 1">
+  <figcaption>DDP: every GPU holds an identical full replica. 4 GPUs × 98 GB = 392 GB used — all redundant.</figcaption>
+</figure>
+
+<p>This is the memory trap that stops most teams from scaling past 7B parameters.</p>
+
+<hr>
+
+<h2>Three numbers that explain the whole problem</h2>
+<p>Mixed-precision training (bf16 params, fp32 optimizer) costs exactly <strong>14 bytes per parameter</strong>:</p>
+
+<!-- Graphic 2: 14 bytes breakdown -->
+<figure>
+  <img src="https://johnny-dai-git.github.io/distributed-training/imgs/fig2.png" style="width:100%;border-radius:8px;" alt="Figure 2">
+  <figcaption>14 bytes per parameter, per GPU. A 7B model needs ~98 GB; a 70B model needs ~980 GB.</figcaption>
+</figure>
+
+<p>No single machine can hold 980 GB. DDP replicates it N times. The math simply doesn't work for large models.</p>
+
+<hr>
+
+<h2>ZeRO — sharding the redundancy away</h2>
+<p>The ZeRO paper asked a simple question: <em>why does every GPU need a full copy of everything?</em> It doesn't. ZeRO removes the redundancy in three stages:</p>
+
+<!-- Graphic 3: ZeRO stages comparison -->
+<figure>
+  <img src="https://johnny-dai-git.github.io/distributed-training/imgs/fig3.png" style="width:100%;border-radius:8px;" alt="Figure 3">
+  <figcaption>Memory per GPU across strategies (N=8). ZeRO-2 achieves 4× memory reduction with zero extra communication.</figcaption>
+</figure>
+
+<p><strong>ZeRO-1</strong> shards optimizer states. Memory halves — but adds 50% more communication than DDP. Rarely the best choice.</p>
+<p><strong>ZeRO-2</strong> shards optimizer states <em>and</em> gradients. Memory drops to ~3.5 B/param. And here's the surprising part: <strong>it adds zero communication overhead compared to DDP</strong>. Same 2× |model| per step, just rearranged. This is almost always the right first move when DDP doesn't fit.</p>
+<p><strong>ZeRO-3 / FSDP</strong> shards everything — including the parameters. Memory scales as 14/N B/param. A 70B model on 8 GPUs needs ~24.5 GB instead of 980 GB. The cost: 50% more communication than DDP.</p>
+
+<hr>
+
+<h2>The insight most tutorials miss</h2>
+<p>ZeRO-3 forces FSDP to reconstruct each layer's weights on the fly. The backward pass computes two distinct gradients per layer:</p>
+<ul>
+  <li><strong>∂ℒ/∂x</strong> — the activation gradient, passed backward through the chain rule. Stays full on every GPU. No communication.</li>
+  <li><strong>∂ℒ/∂W</strong> — the weight gradient. Immediately Reduce-Scattered and sharded. No GPU ever holds the full weight gradient.</li>
+</ul>
+
+<!-- Graphic 4: FSDP per-layer pattern -->
+<figure>
+  <img src="https://johnny-dai-git.github.io/distributed-training/imgs/fig4.png" style="width:100%;border-radius:8px;" alt="Figure 4">
+  <figcaption>FSDP communication breakdown. Forward: 1× |model|. Backward: 2× |model|. Total: 3× |model| vs DDP's 2×.</figcaption>
+</figure>
+
+<hr>
+
+<h2>When to use each strategy</h2>
+
+<!-- Graphic 5: Decision guide -->
+<figure>
+  <img src="https://johnny-dai-git.github.io/distributed-training/imgs/fig5.png" style="width:100%;border-radius:8px;" alt="Figure 5">
+  <figcaption>Decision guide. In practice: DDP → ZeRO-2 → ZeRO-3. ZeRO-1 is rarely the right choice.</figcaption>
+</figure>
+
+<hr>
+
+<h2>The full interactive version</h2>
+<p>The text above covers the key ideas, but the real understanding comes from watching the sharding happen step by step.</p>
+<p>I built an interactive visual guide that walks through:</p>
+<ul>
+  <li>How activations accumulate during the forward pass — and why they matter</li>
+  <li>How All-Reduce decomposes into Reduce-Scatter + All-Gather, the primitive that makes ZeRO possible</li>
+  <li>Animated memory diagrams for ZeRO-1, ZeRO-2, and ZeRO-3 showing exactly what each GPU holds at each training stage</li>
+  <li>The step-by-step FSDP communication flow, layer by layer, with interactive controls</li>
+</ul>
+
+<a class="cta" href="https://johnny-dai-git.github.io/distributed-training/" target="_blank">
+  → Read the full interactive version
+</a>
+
+<p style="color:#888;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;">All animations run in the browser — no setup required.</p>
+
+<div class="ref">
+  References:<br>
+  Rajbhandari et al., <em>ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</em>, SC'20<br>
+  Li et al., <em>PyTorch Distributed: Experiences on Accelerating Data Parallel Training</em>, VLDB'20<br>
+  Zhao et al., <em>PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel</em>, VLDB'23
+</div>
+
+</body>
+</html>
